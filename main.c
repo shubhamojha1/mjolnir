@@ -1,5 +1,8 @@
-#include <stdio.h>
+#include <sys/wait.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 // #include "mylib.h"
 
@@ -60,7 +63,7 @@ int shell_help(char **args){
     printf("Type program names and arguments, and hit enter.\n");
     printf("The following are built in:\n");
 
-    for(int i=0;i<shell_num_builtns(); i++){
+    for(int i=0;i<shell_num_builtins(); i++){
         printf("  %s\n", builtin_str[i]);
     }
 
@@ -126,6 +129,9 @@ void print_welcome_art() {
 }
 
 char *read_line(void){
+
+    // #ifdef USE_STD_GETLINE
+
     int bufsize = READLINE_BUFSIZE;
     int position = 0;
     char *buffer = malloc(sizeof(char) * bufsize);
@@ -137,7 +143,7 @@ char *read_line(void){
     }
 
     while(1) {
-        c = getchar()
+        c = getchar();
 
         if (c == EOF || c == '\n'){
             buffer[position] = '\0';
@@ -163,6 +169,7 @@ char *read_line(void){
 char **split_line(char *line){
     int bufsize = TOKEN_BUFSIZE, position = 0;
     char **tokens = malloc(bufsize * sizeof(char*));
+    char * token, **tokens_backup;
 
     if(!tokens) {
         fprintf(stderr, "mjolnir: allocation error\n");
@@ -176,8 +183,10 @@ char **split_line(char *line){
 
         if (position >= bufsize) {
             bufsize += TOKEN_BUFSIZE;
+            tokens_backup = tokens;
             tokens = realloc(tokens, bufsize * sizeof(char*));
             if(!tokens) {
+                free(tokens_backup);
                 fprintf(stderr, "mjolnir: allocation error!");
                 exit(EXIT_FAILURE);
             }
@@ -214,7 +223,7 @@ int main(int argc, char **argv){
     // char command[MAX_COMMAND_SIZE];
     // char *args[10];
 
-    print_welcome_art();
+    // print_welcome_art();
 
     // run command loop
     shell_loop();
