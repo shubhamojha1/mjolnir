@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-// #include "mylib.h"
 
 /*
 - search for startup files
@@ -21,10 +20,7 @@
 . wait() to manage child process completion
  */
 
-// #define MAX_COMMAND_SIZE 1024
-#define READLINE_BUFSIZE 1024
 #define TOKEN_BUFSIZE 64
-#define TOKEN_DELIMITER " \t\r\n\a"
 
 void print_welcome_art();
 int shell_cd(char **args);
@@ -128,93 +124,134 @@ void print_welcome_art() {
     printf("⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿\n");
 }
 
-char *read_line(void){
-
-    // #ifdef USE_STD_GETLINE
-
-    int bufsize = READLINE_BUFSIZE;
-    int position = 0;
-    char *buffer = malloc(sizeof(char) * bufsize);
-    int c;
-
-    if(!buffer) {
-        fprintf(stderr, "mjolnir: allocation error!\n");
-        exit(EXIT_FAILURE);
-    }
-
-    while(1) {
-        c = getchar();
-
-        if (c == EOF || c == '\n'){
-            buffer[position] = '\0';
-            return buffer;
-        }else {
-            buffer[position] = c;
-        }
-
-        position++;
-
-        // if bufsize exceeded, reallocate
-        if (position >= bufsize) {
-            bufsize += READLINE_BUFSIZE;
-            buffer = realloc(buffer, bufsize);
-            if (!buffer) {
-                fprintf(stderr, "mjolnir: allocation error!\n");
-                exit(EXIT_FAILURE);
-            }
-        }
-    }
-}
-
 char **split_line(char *line){
     int bufsize = TOKEN_BUFSIZE, position = 0;
     char **tokens = malloc(bufsize * sizeof(char*));
-    char * token, **tokens_backup;
 
     if(!tokens) {
         fprintf(stderr, "mjolnir: allocation error\n");
         exit(EXIT_FAILURE);
     }
 
-    token = strtok(line, TOKEN_DELIMITER);
-    while(token != NULL){
-        tokens[position] = token;
-        position++;
+    while(*line) {
+        while(*line == ' ' || *line == '\t') line++;
+        if (!*line) break;
 
         if (position >= bufsize) {
             bufsize += TOKEN_BUFSIZE;
-            tokens_backup = tokens;
             tokens = realloc(tokens, bufsize * sizeof(char*));
             if(!tokens) {
-                free(tokens_backup);
                 fprintf(stderr, "mjolnir: allocation error!");
                 exit(EXIT_FAILURE);
             }
         }
 
-        token = strtok(NULL, TOKEN_DELIMITER);
+        tokens[position] = line;
+        int in_quote = 0;
+        int escape = 0;
+
+        while(*line) {
+            if (escape) {
+                escape = 0;
+                line++;
+                continue;
+            }
+
+            if (*line == '\\' && !in_quote) {
+                escape = 1;
+                line++;
+                continue;
+            }
+
+            if (*line == '"') {
+                in_quote = !in_quote;
+                line++;
+                continue;
+            }
+
+            if (*line == '\'' && !in_quote) {
+                in_quote = 1;
+                line++;
+                char *start = line;
+                while(*line && *line != '\'') line++;
+                if (*line == '\'') *line = '\0';
+                line++;
+                tokens[position] = start;
+                position++;
+
+                while(*line == ' ' || *line == '\t') line++;
+                break;
+            }
+
+            if (!in_quote && (*line == ' ' || *line == '\t')) {
+                *line = '\0';
+                line++;
+                position++;
+                break;
+            }
+
+            line++;
+        }
+
+        if (!*line && tokens[position] != line) {
+            position++;
+        }
     }
+
     tokens[position] = NULL;
     return tokens;
+}
 
+#define HISTORY_MAX 50
+
+static char *history[HISTORY_MAX];
+static int history_count = 0;
+
+static void add_history_entry(const char *line) {
+    if (!line || !*line) return;
+
+    if (history_count > 0 && strcmp(history[history_count - 1], line) == 0) return;
+
+    if (history_count >= HISTORY_MAX) {
+        free(history[0]);
+        memmove(&history[0], &history[1], sizeof(char *) * (HISTORY_MAX - 1));
+        history_count--;
+    }
+
+    history[history_count] = strdup(line);
+    history_count++;
 }
 
 void shell_loop(void){
-    char *line;
+    char *line = NULL;
+    size_t linesize = 0;
     char **args;
-    int status;
+    int status = 1;
 
-    do {
-        printf("> "); 
-        // printf("Normal \033[5m\033[31mBlink\033[0m\n");
-        line = read_line();
+    while (status) {
+        printf("mjolnir> ");
+        fflush(stdout);
+
+        if (getline(&line, &linesize, stdin) == -1) {
+            printf("\n");
+            break;
+        }
+
+        if (line[strcspn(line, "\n")] != '\0') {
+            line[strcspn(line, "\n")] = '\0';
+        }
+
+        if (!*line) continue;
+
+        add_history_entry(line);
+
         args = split_line(line);
         status = execute(args);
 
-        free(line);
-        free (args);
+        free(args);
+    }
 
-    } while(status);
+    free(line);
 }
 
 int main(int argc, char **argv){
