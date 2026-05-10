@@ -14,7 +14,9 @@ void history_init(void) {
 
 void history_add(const char *line) {
     if (!line || !*line) return;
+
     if (history_count > 0 && strcmp(history[history_count - 1], line) == 0) return;
+
     if (history_count >= HISTORY_MAX) {
         free(history[0]);
         memmove(&history[0], &history[1], sizeof(char *) * (HISTORY_MAX - 1));
